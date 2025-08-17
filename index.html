@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Pocket Golf — Fun Version</title>
+<style>
+:root{
+  --bg:#0b1020;
+  --panel:#121a33;
+  --ink:#e8efff;
+  --muted:#9fb4ff;
+  --accent:#ff4d6d;
+  --green:#2dd4bf;
+  --sand:#d2b48c;
+  --brown:#7a5130;
+  --bounce:#1fa34a;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:radial-gradient(1200px 1200px at 20% -10%, #172447 0%, #0b1020 40%, #070b17 100%);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
+#app{display:flex;flex-direction:column;align-items:center;gap:12px;padding:12px}
+header{width:100%;max-width:900px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#34d399 0%,#22c55e 45%,#16a34a 100%);box-shadow:0 8px 24px rgba(34,197,94,.35)}
+.title{font-weight:800;letter-spacing:.3px}
+.hud{display:flex;gap:10px;flex-wrap:wrap}
+.pill{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);padding:6px 10px;border-radius:999px;font-size:12px}
+button{background:linear-gradient(180deg, #1f2a4b 0%, #111a32 100%);color:var(--ink);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;transition:.2s;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+button:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(0,0,0,.35)}
+button:active{transform:translateY(0)}
+#canvasWrap{position:relative;width:100%;max-width:900px;aspect-ratio:16/10;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);box-shadow:0 12px 40px rgba(0,0,0,.35)}
+canvas{width:100%;height:100%;display:block;background:linear-gradient(180deg,#0e1530,#0b1228)}
+.overlay{position:absolute;inset:0;pointer-events:none;display:flex;align-items:flex-start;justify-content:space-between;padding:10px}
+.overlay .corner{display:flex;gap:8px}
+.overlay .corner .card{pointer-events:auto;background:rgba(18,26,51,.85);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:8px 10px;display:flex;gap:10px;align-items:center}
+.label{font-size:12px;color:var(--muted)}
+.value{font-weight:800}
+.bigCenter{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(10,16,32,.85);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px;display:none;flex-direction:column;gap:10px;min-width:240px;align-items:center}
+.bigCenter.show{display:flex}
+.menuGrid{display:flex;gap:10px;overflow-x:auto;width:100%;max-width:900px;padding-bottom:4px}
+.courseCard{flex:0 0 220px;position:relative;background:rgba(18,26,51,.8);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:12px;cursor:pointer}
+.courseCard h3{margin:0 0 4px 0;font-size:16px}
+.courseCard .best{font-size:12px;color:var(--muted)}
+.lockedOverlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:40px;opacity:.85}
+.selectBar{display:flex;gap:8px;flex-wrap:wrap}
+.hidden{display:none}
+footer{opacity:.6;font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand"><div class="logo"></div><div class="title">Pocket Golf</div></div>
+    <div class="hud">
+      <div class="pill">Hole <span id="hudHole">-</span></div>
+      <div class="pill">Par <span id="hudPar">-</span></div>
+      <div class="pill">Strokes <span id="hudStrokes">0</span></div>
+      <div class="pill">Course Score <span id="hudCourseScore">E</span></div>
+      <div class="pill">Power <span id="hudPower">0%</span></div>
+    </div>
+    <div class="hud">
+      <button id="btnMenu">Menu</button>
+    </div>
+  </header>
+  <div id="canvasWrap">
+    <canvas id="game" width="900" height="560"></canvas>
+    <div id="menu" class="bigCenter show">
+      <h2 style="margin:0">Select Course</h2>
+      <div class="menuGrid" id="menuGrid"></div>
+      <div class="label" style="margin-top:8px">Get Par or better to unlock the next course.</div>
+      <div class="selectBar">
+        <button id="btnPlaySelected">Play Selected</button>
+        <button id="btnCloseMenu">Close</button>
+      </div>
+    </div>
+    <div id="between" class="bigCenter">
+      <h2 id="betweenTitle" style="margin:0">Hole Complete!</h2>
+      <div id="betweenInfo" class="label">—</div>
+      <div class="selectBar">
+        <button id="btnNextHole">Next Hole</button>
+      </div>
+    </div>
+  </div>
+  <footer>Drag anywhere, pull back to aim, release to shoot. Red line shows aim. Sand slows, brown bumps a little, green bumps more.</footer>
+</div>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const HUDHole=document.getElementById('hudHole');
+const HUDPar=document.getElementById('hudPar');
+const HUDStrokes=document.getElementById('hudStrokes');
+const HUDScore=document.getElementById('hudCourseScore');
+const HUDPower=document.getElementById('hudPower');
+const menu=document.getElementById('menu');
+const menuGrid=document.getElementById('menuGrid');
+const between=document.getElementById('between');
+const btnNextHole=document.getElementById('btnNextHole');
+let courses=[];
+let selectedCourse=0;
+let currentHole=0;
+let strokes=0;
+let courseScore=0; // E=0, +1=bogey, -1=birdie etc.
+let ball={x:100,y:H-50,vx:0,vy:0,r:8,shooting:false};
+let mouse={x:0,y:0,dragX:0,dragY:0,dragging:false};
+const friction=0.98;
+function resetBall(){
+  ball.x=100; ball.y=H-50; ball.vx=0; ball.vy=0; ball.shooting=false;
+}
+function initCourses(){
+  for(let i=0;i<10;i++){
+    courses.push({name:"Course "+(i+1),holes:9,best:[],locked:i>0});
+  }
+  renderMenu();
+}
+function renderMenu(){
+  menuGrid.innerHTML='';
+  courses.forEach((c,i)=>{
+    const card=document.createElement('div');
+    card.className='courseCard';
+    if(c.locked)card.innerHTML=`<h3>${c.name}</h3><div class="lockedOverlay">🔒</div>`;
+    else card.innerHTML=`<h3>${c.name}</h3><div class="best">Best: ${c.best.length?c.best.join(','):'-'}</div>`;
+    card.onclick=()=>{if(!c.locked)selectedCourse=i;};
+    menuGrid.appendChild(card);
+  });
+}
+function startCourse(){
+  currentHole=0;strokes=0;courseScore=0;HUDScore.innerText='E';menu.classList.remove('show');nextHole();
+}
+function nextHole(){
+  if(currentHole>=courses[selectedCourse].holes){
+    // finished course
+    alert('Course Complete!');
+    courses[selectedCourse].locked=false;
+    if(selectedCourse+1<courses.length) courses[selectedCourse+1].locked=false;
+    renderMenu(); menu.classList.add('show'); return;
+  }
+  strokes=0;
+  resetBall();
+  HUDHole.innerText=currentHole+1;
+  HUDPar.innerText=3+Math.floor(currentHole/3);
+  HUDStrokes.innerText=strokes;
+  HUDPower.innerText='0%';
+}
+function gameLoop(){
+  ctx.clearRect(0,0,W,H);
+  // draw course (simple)
+  ctx.fillStyle='#2d6'; ctx.fillRect(50,H-20,W-100,10);
+  // ball
+  ball.x+=ball.vx; ball.y+=ball.vy;
+  ball.vx*=friction; ball.vy*=friction;
+  if(Math.abs(ball.vx)<0.1) ball.vx=0;
+  if(Math.abs(ball.vy)<0.1) ball.vy=0;
+  if(ball.y+ball.r>H-20){ball.y=H-20-ball.r; ball.vy*=-0.5; ball.vx*=0.8;}
+  ctx.beginPath(); ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2); ctx.fillStyle='#ff4d6d'; ctx.fill();
+  // aiming line
+  if(mouse.dragging){
+    ctx.strokeStyle='red'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(ball.x,ball.y); ctx.lineTo(mouse.x,mouse.y); ctx.stroke();
+    HUDPower.innerText=Math.floor(Math.min(100,Math.hypot(mouse.x-ball.x,mouse.y-ball.y)))+'%';
+  }
+  requestAnimationFrame(gameLoop);
+}
+canvas.addEventListener('mousedown',e=>{mouse.dragging=true; mouse.dragX=e.offsetX; mouse.dragY=e.offsetY;});
+canvas.addEventListener('mouseup',e=>{
+  if(mouse.dragging){
+    const dx=(mouse.dragX-e.offsetX)/10;
+    const dy=(mouse.dragY-e.offsetY)/10;
+    ball.vx=dx; ball.vy=dy; strokes++; HUDStrokes.innerText=strokes;
+  }
+  mouse.dragging=false;
+});
+canvas.addEventListener('mousemove',e=>{mouse.x=e.offsetX; mouse.y=e.offsetY;});
+document.getElementById('btnMenu').onclick=()=>{menu.classList.add('show');};
+document.getElementById('btnCloseMenu').onclick=()=>{menu.classList.remove('show');};
+document.getElementById('btnPlaySelected').onclick=startCourse;
+btnNextHole.onclick=()=>{currentHole++;nextHole();};
+initCourses(); gameLoop();
+</script>
+</body>
+</html>
